@@ -1,0 +1,33 @@
+<html ng-app="index">
+<head>
+  <script src="/angular.js"></script>
+  <script>
+  var index = angular.module('index', []);
+
+  index.controller('indexCtrl', function ($scope) {
+    $scope.fileEntries = {{ENTRIES_JSON}};
+    $scope.currentPath = "{{CURRENT_PATH}}";
+  });
+</script>
+<style>
+.fs {
+  position: relative;
+  width: 600px;
+}
+.time {
+  position: absolute;
+  right:0;
+}
+</style>
+</head>
+<body ng-controller="indexCtrl">
+  <h1>Index of {{currentPath}}</h1>
+  <ul ng-repeat="fs in fileEntries | orderBy:'-time'">
+    <li class="fs">
+      <a href="{{currentPath}}/{{fs.name}}">{{fs.name}}</a>
+      <span class="time">{{fs.time}}</span>
+     </li>
+  </ul>
+
+</body>
+</html>
