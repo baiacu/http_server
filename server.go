@@ -2,9 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"io"
 	"io/ioutil"
-	"flag"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -26,6 +27,12 @@ func IsDirectory(path string) bool {
 func handler(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Clean(r.URL.Path)
 
+	// Special case for angular script
+	if path == "/_angular.js" {
+		handleFile(w, r, "_angular.js")
+		return
+	}
+
 	if !strings.HasPrefix(path, *servingDir) {
 		http.Redirect(w, r, filepath.Join(*servingDir, path), http.StatusFound)
 		return
@@ -41,6 +48,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 func handleFile(w http.ResponseWriter, r *http.Request, path string) {
 	file, err := loadFile(path)
 	if err != nil {
+		log.Print(err)
 		http.NotFound(w, r)
 		return
 	}
@@ -50,19 +58,25 @@ func handleFile(w http.ResponseWriter, r *http.Request, path string) {
 }
 
 type FileEntry struct {
-	Name    string    `json:"name"`
-	ModTime time.Time `json:"time"`
+	Name     string    `json:"name"`
+	FullPath string    `json:"path"`
+	ModTime  time.Time `json:"time"`
 }
 
-func handleDirectory(w http.ResponseWriter, r *http.Request, path string) {
-	fs, err := ioutil.ReadDir(path)
+func handleDirectory(w http.ResponseWriter, r *http.Request, dir string) {
+	fs, err := ioutil.ReadDir(dir)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	fileEntries := []FileEntry{}
 	for _, f := range fs {
-		fileEntries = append(fileEntries, FileEntry{Name: f.Name(), ModTime: f.ModTime()})
+		fe := FileEntry{
+			Name:     f.Name(),
+			FullPath: filepath.Join(dir, f.Name()),
+			ModTime:  f.ModTime(),
+		}
+		fileEntries = append(fileEntries, fe)
 	}
 
 	content, err := ioutil.ReadFile("list_dir.html")
@@ -72,7 +86,7 @@ func handleDirectory(w http.ResponseWriter, r *http.Request, path string) {
 
 	j, _ := json.Marshal(fileEntries)
 	out := strings.Replace(string(content), "{{ENTRIES_JSON}}", string(j), -1)
-	out = strings.Replace(out, "{{CURRENT_PATH}}", path, -1)
+	out = strings.Replace(out, "{{CURRENT_PATH}}", dir, -1)
 	io.WriteString(w, out)
 }
 
@@ -89,13 +103,14 @@ func loadFile(filename string) (*FileContent, error) {
 
 	content_type := mime.TypeByExtension(filepath.Ext(filename))
 	if content_type == "" {
-		content_type = "plain/text"
+		content_type = "text/plain"
 	}
 
 	return &FileContent{Content: content, ContentType: content_type}, nil
 }
 
 func main() {
+	flag.Parse()
 	http.HandleFunc("/", handler)
 	http.ListenAndServe(":8080", nil)
 }
