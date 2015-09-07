@@ -26,23 +26,37 @@ func IsDirectory(path string) bool {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Clean(r.URL.Path)
+	log.Print("Opening: " + path)
 
-	// Special case for angular script
+	// Special case for angular script, needed by the handleDirectory.
 	if path == "/_angular.js" {
 		handleFile(w, r, "_angular.js")
 		return
 	}
 
-	if !strings.HasPrefix(path, *servingDir) {
-		http.Redirect(w, r, filepath.Join(*servingDir, path), http.StatusFound)
-		return
-	}
+	path = filepath.Join(*servingDir, path)
 
 	if IsDirectory(path) {
+		// Is there an /path/index.html?
+		if handleFileIndex(w, r, path) {
+			return;
+		}
+
 		handleDirectory(w, r, path)
 	} else {
 		handleFile(w, r, path)
 	}
+}
+
+func handleFileIndex(w http.ResponseWriter, r *http.Request, path string) bool {
+	file, err := loadFile(filepath.Join(path, "/index.html"))
+	if err != nil {
+		return false
+	}
+
+	w.Header().Set("Content-Type", file.ContentType)
+	w.Write(file.Content)
+	return true
 }
 
 func handleFile(w http.ResponseWriter, r *http.Request, path string) {
@@ -73,7 +87,7 @@ func handleDirectory(w http.ResponseWriter, r *http.Request, dir string) {
 	for _, f := range fs {
 		fe := FileEntry{
 			Name:     f.Name(),
-			FullPath: filepath.Join(dir, f.Name()),
+			FullPath: strings.TrimPrefix(filepath.Join(dir, f.Name()), *servingDir),
 			ModTime:  f.ModTime(),
 		}
 		fileEntries = append(fileEntries, fe)
